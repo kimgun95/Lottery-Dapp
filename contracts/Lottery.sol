@@ -24,6 +24,8 @@ contract Lottery {
 	uint256 constant internal BET_AMOUNT = 5 * 10 ** 15; // 5 * 0.001ETH
 	uint256 private _pot; // 팟머니를 저장할 곳
 
+	enum BettingResult {Win, Fail, Draw}
+	enum BlockStatus {Checkable, NotRevealed, BlockLimitPassed}
 	event BET(uint256 index, address bettor, uint256 amount, byte challenges, uint256 answerBlockNumber);
 
 	constructor() public {
@@ -35,7 +37,12 @@ contract Lottery {
 		return _pot;
 	}
 
-	// bet
+	/**
+     * @dev 베팅을 한다. 유저는 0.005 ETH를 보내야 하고, 베팅용 1 byte 글자를 보낸다.
+     * 큐에 저장된 베팅 정보는 이후 distribute 함수에서 해결된다.
+     * @param challenges 유저가 베팅하는 글자
+     * @return 함수가 잘 수행되었는지 확인해는 bool 값
+     */
 	function bet(byte challenges) public payable returns (bool result) {
 		// check the proper ether is sent
 		require(msg.value == BET_AMOUNT, "Not enough ETH");
@@ -45,10 +52,91 @@ contract Lottery {
 		emit BET(_tail - 1, msg.sender, msg.value, challenges, block.number + BET_BLOCK_INTERVAL);
 		return true;
 	}
-		// save the bet to the queue
+
 	
 	// distribute
-		// check the answer
+	function distribute() public {
+		uint256 cur;
+		BetInfo memory b;
+		BlockStatus currentBlockStatus;
+
+		for (cur = _head; cur < _tail; cur++) {
+			b = _bets[cur];
+			currentBlockStatus = getBlockStatus(b.answerBlockNumber);
+			// Checkable: block.number > AnswerBlockNumber && block.number  <  BLOCK_LIMIT + AnswerBlockNumber
+			if (currentBlockStatus == BlockStatus.Checkable) {
+				// if win, bettor gets pot
+
+				// if fail, bettor's money goes pot
+
+				// if draw, refund bettor's money
+
+			}
+			// Not Revealed: block.number <= AnswerBlockNumber
+			if (currentBlockStatus == BlockStatus.NotRevealed) {
+				break;
+			}
+			// Block Limit Passed: block.number >= AnswerBlockNumber + BLOCK_LIMIT
+			if (currentBlockStatus == BlockStatus.BlockLimitPassed) {
+				// refunc
+
+				// emit refund
+			}
+
+			popBet(cur);
+		}
+	}
+
+	function isMatch(byte challenges, bytes32 answer) public pure returns (BettingResult) {
+		// challenges 0xab
+		// answer 0xab......ff 32 bytes
+
+		byte c1 = challenges;
+		byte c2 = challenges;
+		
+		byte a1 = answer[0]; // 0번 해쉬를 가져오는 것. byte단위니까 ab를 가져오는 것 같음.
+		byte a2 = answer[0];
+
+		 // Get first number
+        c1 = c1 >> 4; // 0xab -> 0x0a
+        c1 = c1 << 4; // 0x0a -> 0xa0
+
+        a1 = a1 >> 4;
+        a1 = a1 << 4;
+
+        // Get Second number
+        c2 = c2 << 4; // 0xab -> 0xb0
+        c2 = c2 >> 4; // 0xb0 -> 0x0b
+
+        a2 = a2 << 4;
+        a2 = a2 >> 4;
+
+        if(a1 == c1 && a2 == c2) {
+            return BettingResult.Win;
+        }
+
+        if(a1 == c1 || a2 == c2) {
+            return BettingResult.Draw;
+        }
+
+        return BettingResult.Fail;
+	}
+
+	function getBlockStatus(uint256 answerBlockNumber) internal view returns (BlockStatus) {
+		if(block.number > answerBlockNumber && block.number  <  BLOCK_LIMIT + answerBlockNumber) {
+			return BlockStatus.Checkable;
+		}
+
+		if(block.number <= answerBlockNumber) {
+			return BlockStatus.NotRevealed;
+		}
+
+		if(block.number >= answerBlockNumber + BLOCK_LIMIT) {
+			return BlockStatus.BlockLimitPassed;
+		}
+
+		return BlockStatus.BlockLimitPassed;
+	}
 
 	function getBetInfo(uint256 index) public view returns (uint256 answerBlockNumber, address bettor, byte challenges) {
 		// 받아온 index를 통해 _bets[index]를 조회하여 betInfo를 반환.
